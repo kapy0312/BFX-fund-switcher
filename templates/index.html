@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BFX Fund Switcher</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, sans-serif;
+            background: #0f1117;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: #fff;
+        }
+
+        .card {
+            background: #1a1d2e;
+            border: 1px solid #2d3148;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            font-size: 13px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+
+        .balance-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .balance-item {
+            background: #0f1117;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .balance-label {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .balance-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .balance-sub {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 2px;
+        }
+
+        .btn-refresh {
+            background: none;
+            border: 1px solid #2d3148;
+            color: #64748b;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 12px;
+        }
+
+        .btn-refresh:hover {
+            border-color: #4a5568;
+            color: #94a3b8;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #94a3b8;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        input[type=number],
+        input[type=text] {
+            width: 100%;
+            background: #0f1117;
+            border: 1px solid #2d3148;
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #4f6ef7;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .checkbox-row input {
+            width: auto;
+        }
+
+        .checkbox-row label {
+            margin: 0;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-blue {
+            background: #3b5bdb;
+            color: #fff;
+        }
+
+        .btn-blue:hover:not(:disabled) {
+            background: #4c6ef5;
+        }
+
+        .btn-green {
+            background: #2f9e44;
+            color: #fff;
+        }
+
+        .btn-green:hover:not(:disabled) {
+            background: #37b24d;
+        }
+
+        .log-box {
+            background: #0f1117;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.8;
+            min-height: 80px;
+            white-space: pre-wrap;
+            color: #94a3b8;
+        }
+
+        .log-box .success {
+            color: #51cf66;
+        }
+
+        .log-box .error {
+            color: #ff6b6b;
+        }
+
+        .status {
+            font-size: 13px;
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+        }
+
+        .status.ok {
+            background: #1a3a2a;
+            color: #51cf66;
+        }
+
+        .status.fail {
+            background: #3a1a1a;
+            color: #ff6b6b;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #4f6ef7;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔄 BFX Fund Switcher</h1>
+
+    <div class="card">
+        <h2>📊 目前可動用餘額</h2>
+        <div class="balance-grid">
+            <div class="balance-item">
+                <div class="balance-label">Funding USD</div>
+                <div class="balance-value" id="bal-funding-usd">—</div>
+            </div>
+            <div class="balance-item">
+                <div class="balance-label">Funding UST</div>
+                <div class="balance-value" id="bal-funding-ust">—</div>
+            </div>
+            <div class="balance-item">
+                <div class="balance-label">Exchange USD</div>
+                <div class="balance-value" id="bal-exchange-usd">—</div>
+            </div>
+            <div class="balance-item">
+                <div class="balance-label">Exchange UST</div>
+                <div class="balance-value" id="bal-exchange-ust">—</div>
+            </div>
+        </div>
+        <button class="btn-refresh" onclick="loadBalances()">↻ 重新整理</button>
+    </div>
+
+    <div class="card">
+        <h2>⚡ 執行操作</h2>
+        <div class="form-group">
+            <label>金額</label>
+            <input type="number" id="amount" placeholder="輸入金額" min="0" step="0.01" />
+            <div class="checkbox-row">
+                <input type="checkbox" id="use-all" onchange="toggleAll(this)" />
+                <label for="use-all">全部可動用金額</label>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-blue" id="btn-ust-usd" onclick="execute('ust_to_usd')">
+                UST融資 → USD融資
+            </button>
+            <button class="btn btn-green" id="btn-usd-ust" onclick="execute('usd_to_ust')">
+                USD融資 → UST融資
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📋 執行記錄</h2>
+        <div class="log-box" id="log-box">等待操作...</div>
+        <div id="status-bar"></div>
+    </div>
+
+    <script>
+        async function loadBalances() {
+            document.querySelectorAll('.balance-value').forEach(el => el.textContent = '載入中...');
+            try {
+                const res = await fetch('/api/balances');
+                const data = await res.json();
+                document.getElementById('bal-funding-usd').textContent = '$' + data.funding_USD.toFixed(4);
+                document.getElementById('bal-funding-ust').textContent = '$' + data.funding_UST.toFixed(4);
+                document.getElementById('bal-exchange-usd').textContent = '$' + data.exchange_USD.toFixed(4);
+                document.getElementById('bal-exchange-ust').textContent = '$' + data.exchange_UST.toFixed(4);
+            } catch (e) {
+                document.querySelectorAll('.balance-value').forEach(el => el.textContent = '錯誤');
+            }
+        }
+
+        function toggleAll(cb) {
+            const input = document.getElementById('amount');
+            input.disabled = cb.checked;
+            if (cb.checked) input.value = '';
+        }
+
+        function setLoading(loading) {
+            document.getElementById('btn-ust-usd').disabled = loading;
+            document.getElementById('btn-usd-ust').disabled = loading;
+        }
+
+        async function execute(direction) {
+            const useAll = document.getElementById('use-all').checked;
+            const amountInput = document.getElementById('amount').value;
+
+            if (!useAll && (!amountInput || parseFloat(amountInput) <= 0)) {
+                alert('請輸入金額或勾選全部');
+                return;
+            }
+
+            const amount = useAll ? 'all' : amountInput;
+            const label = direction === 'ust_to_usd' ? 'UST融資 → USD融資' : 'USD融資 → UST融資';
+
+            if (!confirm('確認執行：' + label + '，金額：' + (useAll ? '全部' : '$' + amount) + '？')) return;
+
+            setLoading(true);
+            document.getElementById('log-box').textContent = '⏳ 執行中，請稍候...\n(約需 15~30 秒)';
+            document.getElementById('status-bar').innerHTML = '';
+
+            try {
+                const res = await fetch('/api/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direction, amount })
+                });
+                const data = await res.json();
+
+                document.getElementById('log-box').textContent = data.logs ? data.logs.join('\n') : '';
+
+                if (data.success) {
+                    document.getElementById('status-bar').innerHTML = '<div class="status ok">✅ 操作完成</div>';
+                } else {
+                    document.getElementById('status-bar').innerHTML = '<div class="status fail">❌ ' + (data.error || '操作失敗') + '</div>';
+                }
+
+                loadBalances();
+            } catch (e) {
+                document.getElementById('log-box').textContent = '❌ 網路錯誤：' + e.message;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        loadBalances();
+    </script>
+</body>
+
+</html>
