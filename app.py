@@ -22,6 +22,10 @@ load_env()
 API_KEY = os.environ.get('BFX_API_KEY', '')
 API_SECRET = os.environ.get('BFX_API_SECRET', '')
 
+# 加這兩行確認有沒有讀到
+print("API_KEY loaded:", API_KEY[:8] + "..." if API_KEY else "❌ 空的")
+print("API_SECRET loaded:", API_SECRET[:8] + "..." if API_SECRET else "❌ 空的")
+
 app = Flask(__name__)
 
 
@@ -55,6 +59,32 @@ def get_available():
         key = f"{w[0]}_{w[1]}"
         wallets[key] = w[4] if w[4] is not None else 0
     return wallets
+
+
+def get_funding_offers():
+    usd_credits = bfx_request('/v2/auth/r/funding/credits/fUSD')
+    ust_credits = bfx_request('/v2/auth/r/funding/credits/fUST')
+
+    # print("USD credits:", usd_credits)
+    # print("UST credits:", ust_credits)
+
+    def parse_credits(credits):        # ← parse_credits 要在函式裡面
+        if not isinstance(credits, list):
+            return []
+        result = []
+        for o in credits:
+            if isinstance(o, list) and len(o) > 10:
+                result.append({
+                    'amount': round(abs(o[5]), 4),
+                    'rate':   round(o[11] * 100 * 365, 4),
+                    'period': o[12],
+                })
+        return result
+
+    return {                           # ← return 要加回來
+        'USD': parse_credits(usd_credits),
+        'UST': parse_credits(ust_credits),
+    }
 
 
 def transfer(from_wallet, to_wallet, currency, amount):
@@ -101,6 +131,15 @@ def api_balances():
             'exchange_USD': w.get('exchange_USD', 0),
             'exchange_UST': w.get('exchange_UST', 0),
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/offers')
+def api_offers():
+    try:
+        offers = get_funding_offers()
+        return jsonify(offers)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -188,10 +227,45 @@ def api_switch():
         logs.append(f'❌ 發生錯誤: {str(e)}')
         return jsonify({'success': False, 'logs': logs, 'error': str(e)}), 500
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 
+def debug_api():
+    print("\n" + "="*60)
+    print("📋 診斷：錢包資料")
+    print("="*60)
+    wallets = bfx_request('/v2/auth/r/wallets')
+    for w in wallets:
+        print(w)
+
+    print("\n" + "="*60)
+    print("📋 診斷：fUSD 掛單")
+    print("="*60)
+    usd = bfx_request('/v2/auth/r/funding/offers/fUSD')
+    print("筆數:", len(usd) if isinstance(usd, list) else "非陣列")
+    for i, o in enumerate(usd if isinstance(usd, list) else []):
+        print(f"  [{i}] {o}")
+
+    print("\n" + "="*60)
+    print("📋 診斷：fUST 掛單")
+    print("="*60)
+    ust = bfx_request('/v2/auth/r/funding/offers/fUST')
+    print("筆數:", len(ust) if isinstance(ust, list) else "非陣列")
+    for i, o in enumerate(ust if isinstance(ust, list) else []):
+        print(f"  [{i}] {o}")
+
+    print("\n" + "="*60)
+    print("📋 診斷：fUSDT 掛單")
+    print("="*60)
+    usdt = bfx_request('/v2/auth/r/funding/offers/fUSDT')
+    print("筆數:", len(usdt) if isinstance(usdt, list) else "非陣列")
+    for i, o in enumerate(usdt if isinstance(usdt, list) else []):
+        print(f"  [{i}] {o}")
+
+
 if __name__ == '__main__':
+    # debug_api()   # ← 加這行
     app.run(debug=True, port=5000)

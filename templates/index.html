@@ -18,6 +18,10 @@
             color: #e2e8f0;
             min-height: 100vh;
             padding: 24px;
+            max-width: 800px;
+            /* ← 加這行，限制最寬寬度 */
+            margin: 0 auto;
+            /* ← 加這行，讓內容置中 */
         }
 
         h1 {
@@ -256,6 +260,18 @@
     </div>
 
     <div class="card">
+        <h2>📋 目前掛單</h2>
+        <div style="margin-bottom:12px">
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">USD 融資掛單</div>
+            <div id="offers-usd" style="font-size:13px;color:#94a3b8">載入中...</div>
+        </div>
+        <div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">UST 融資掛單</div>
+            <div id="offers-ust" style="font-size:13px;color:#94a3b8">載入中...</div>
+        </div>
+    </div>
+
+    <div class="card">
         <h2>⚡ 執行操作</h2>
         <div class="form-group">
             <label>金額</label>
@@ -267,10 +283,10 @@
         </div>
         <div class="btn-group">
             <button class="btn btn-blue" id="btn-ust-usd" onclick="execute('ust_to_usd')">
-                UST融資 → USD融資
+                USDT融資 → USD融資
             </button>
             <button class="btn btn-green" id="btn-usd-ust" onclick="execute('usd_to_ust')">
-                USD融資 → UST融資
+                USD融資 → USDT融資
             </button>
         </div>
     </div>
@@ -294,6 +310,41 @@
             } catch (e) {
                 document.querySelectorAll('.balance-value').forEach(el => el.textContent = '錯誤');
             }
+        }
+
+        async function loadOffers() {
+            try {
+                const res = await fetch('/api/offers');
+                const data = await res.json();
+
+                renderOffers('offers-usd', data.USD, 'USD');
+                renderOffers('offers-ust', data.UST, 'UST');
+            } catch (e) {
+                document.getElementById('offers-usd').textContent = '錯誤';
+                document.getElementById('offers-ust').textContent = '錯誤';
+            }
+        }
+
+        function renderOffers(elementId, offers, currency) {
+            const el = document.getElementById(elementId);
+
+            if (!offers || offers.length === 0) {
+                el.textContent = '目前無掛單';
+                return;
+            }
+
+            const total = offers.reduce((sum, o) => sum + o.amount, 0);
+
+            el.innerHTML = offers.map(o => `
+        <div style="background:#0f1117;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+            <span>$${o.amount} ${currency} · ${o.period}天</span>
+            <span style="color:#51cf66">${o.rate}% / 年</span>
+        </div>
+        `).join('') + `
+            <div style="margin-top:8px;font-size:11px;color:#475569">
+                計息中總額 $${total.toFixed(2)} ${currency}
+            </div>
+        `;
         }
 
         function toggleAll(cb) {
@@ -342,6 +393,7 @@
                 }
 
                 loadBalances();
+                loadOffers();    // ← 加這行
             } catch (e) {
                 document.getElementById('log-box').textContent = '❌ 網路錯誤：' + e.message;
             } finally {
@@ -350,6 +402,7 @@
         }
 
         loadBalances();
+        loadOffers();    // ← 這行
     </script>
 </body>
 
