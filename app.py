@@ -5,7 +5,72 @@ import hmac
 import time
 import json
 import os
+import sys
+import socket
+import base64
+import sqlite3
+from cryptography.fernet import Fernet
 from pathlib import Path
+
+
+def get_base_dir():
+    """exe 模式回傳 exe 所在目錄，開發模式回傳腳本目錄"""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+def _fernet_key():
+    machine_id = socket.gethostname() + os.getenv('USERNAME', os.getenv('USER', 'bfx'))
+    raw = hashlib.pbkdf2_hmac(
+        'sha256', machine_id.encode(), b'bfx_salt_v1', 200000, 32)
+    return base64.urlsafe_b64encode(raw)
+
+
+def encrypt_str(text): return Fernet(
+    _fernet_key()).encrypt(text.encode()).decode()
+
+
+def decrypt_str(token): return Fernet(
+    _fernet_key()).decrypt(token.encode()).decode()
+
+
+def init_db():
+    conn = sqlite3.connect(str(get_base_dir() / 'bfx_config.db'))
+    conn.execute(
+        'CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)')
+    conn.commit()
+    conn.close()
+
+
+def db_save_keys(api_key, api_secret):
+    conn = sqlite3.connect(str(get_base_dir() / 'bfx_config.db'))
+    conn.execute('INSERT OR REPLACE INTO config VALUES (?,?)',
+                 ('api_key', encrypt_str(api_key)))
+    conn.execute('INSERT OR REPLACE INTO config VALUES (?,?)',
+                 ('api_secret', encrypt_str(api_secret)))
+    conn.commit()
+    conn.close()
+
+
+def db_load_keys():
+    try:
+        conn = sqlite3.connect(str(get_base_dir() / 'bfx_config.db'))
+        rows = dict(conn.execute(
+            "SELECT key, value FROM config WHERE key IN ('api_key','api_secret')").fetchall())
+        conn.close()
+        if 'api_key' in rows and 'api_secret' in rows:
+            return decrypt_str(rows['api_key']), decrypt_str(rows['api_secret'])
+    except:
+        pass
+    return '', ''
+
+
+def db_clear_keys():
+    conn = sqlite3.connect(str(get_base_dir() / 'bfx_config.db'))
+    conn.execute("DELETE FROM config WHERE key IN ('api_key','api_secret')")
+    conn.commit()
+    conn.close()
 
 
 def load_env():
@@ -17,30 +82,41 @@ def load_env():
                 os.environ[key] = value
 
 
-load_env()
+init_db()
 
-API_KEY = os.environ.get('BFX_API_KEY', '')
-API_SECRET = os.environ.get('BFX_API_SECRET', '')
+# 從 DB 載入，沒有就退回 .env（開發方便用）
+API_KEY, API_SECRET = db_load_keys()
+if not API_KEY:
+    load_env()
+    API_KEY = os.environ.get('BFX_API_KEY', '')
+    API_SECRET = os.environ.get('BFX_API_SECRET', '')
+    if API_KEY and API_SECRET:
+        db_save_keys(API_KEY, API_SECRET)  # 自動遷移
 
 # 加這兩行確認有沒有讀到
-print("API_KEY loaded:", API_KEY[:8] + "..." if API_KEY else "❌ 空的")
-print("API_SECRET loaded:", API_SECRET[:8] + "..." if API_SECRET else "❌ 空的")
+print("API_KEY loaded:", API_KEY[:8] + "..." if API_KEY else "NOT SET")
+print("API_SECRET loaded:", API_SECRET[:8] +
+      "..." if API_SECRET else "NOT SET")
 
 app = Flask(__name__)
 
 
 def bfx_request(endpoint, body={}):
+    api_key, api_secret = db_load_keys()
+    if not api_key:
+        raise ValueError("API Key 尚未設定")
+
     nonce = str(int(time.time() * 1000))
     body_json = json.dumps(body)
     signature_payload = f'/api{endpoint}{nonce}{body_json}'
     sig = hmac.new(
-        API_SECRET.encode('utf-8'),
+        api_secret.encode('utf-8'),   # ✅ 用區域變數
         signature_payload.encode('utf-8'),
         hashlib.sha384
     ).hexdigest()
     headers = {
         'bfx-nonce': nonce,
-        'bfx-apikey': API_KEY,
+        'bfx-apikey': api_key,        # ✅ 用區域變數
         'bfx-signature': sig,
         'content-type': 'application/json'
     }
@@ -266,6 +342,29 @@ def debug_api():
         print(f"  [{i}] {o}")
 
 
+@app.route('/api/config', methods=['GET'])
+def api_config_get():
+    k, _ = db_load_keys()
+    return jsonify({'configured': bool(k)})
+
+
+@app.route('/api/config', methods=['POST'])
+def api_config_set():
+    data = request.json or {}
+    k = (data.get('api_key') or '').strip()
+    s = (data.get('api_secret') or '').strip()
+    if not k or not s:
+        return jsonify({'success': False, 'error': '請填寫完整'}), 400
+    db_save_keys(k, s)
+    return jsonify({'success': True})
+
+
+@app.route('/api/config', methods=['DELETE'])
+def api_config_delete():
+    db_clear_keys()
+    return jsonify({'success': True})
+
+
 if __name__ == '__main__':
     # debug_api()   # ← 加這行
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=9528)

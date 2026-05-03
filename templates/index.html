@@ -234,7 +234,15 @@
 </head>
 
 <body>
-    <h1>🔄 BFX Fund Switcher</h1>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h1>🔄 BFX Fund Switcher</h1>
+        <div style="display:flex;gap:8px">
+            <button onclick="loadBalances();loadOffers();"
+                style="background:none;border:1px solid #2d3148;color:#64748b;width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:18px">↻</button>
+            <button onclick="openSettings()"
+                style="background:none;border:1px solid #2d3148;color:#64748b;width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:18px">⚙️</button>
+        </div>
+    </div>
 
     <div class="card">
         <h2>📊 目前可動用餘額</h2>
@@ -295,6 +303,37 @@
         <h2>📋 執行記錄</h2>
         <div class="log-box" id="log-box">等待操作...</div>
         <div id="status-bar"></div>
+    </div>
+
+    <div id="modal"
+        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center">
+        <div
+            style="background:#1a1d2e;border:1px solid #2d3148;border-radius:16px;padding:28px;width:420px;max-width:95vw">
+            <h3 style="color:#fff;margin-bottom:20px">⚙️ API Key 設定</h3>
+            <p style="font-size:12px;color:#475569;margin-bottom:20px;line-height:1.6">
+                Key 使用 AES-256 加密儲存於本機 bfx_config.db，不會上傳任何伺服器。
+            </p>
+            <label style="font-size:12px;color:#94a3b8">API Key</label>
+            <input type="password" id="inp-key" placeholder="貼上 API Key"
+                style="width:100%;background:#0f1117;border:1px solid #2d3148;border-radius:8px;padding:10px;color:#fff;font-size:14px;margin:6px 0 14px;outline:none" />
+            <label style="font-size:12px;color:#94a3b8">API Secret</label>
+            <input type="password" id="inp-secret" placeholder="貼上 API Secret"
+                style="width:100%;background:#0f1117;border:1px solid #2d3148;border-radius:8px;padding:10px;color:#fff;font-size:14px;margin:6px 0 6px;outline:none" />
+            <div id="modal-msg" style="min-height:20px;font-size:13px;margin-bottom:8px"></div>
+            <div style="display:flex;gap:10px;margin-top:12px">
+                <button onclick="closeSettings()"
+                    style="flex:1;padding:11px;border-radius:8px;border:none;background:#2d3148;color:#94a3b8;cursor:pointer">取消</button>
+                <button onclick="saveKeys()"
+                    style="flex:1;padding:11px;border-radius:8px;border:none;background:#3b5bdb;color:#fff;cursor:pointer">💾
+                    儲存</button>
+            </div>
+            <div style="border-top:1px solid #2d3148;margin-top:16px;padding-top:16px">
+                <p style="font-size:12px;color:#475569;margin-bottom:10px">危險操作</p>
+                <button onclick="clearKeys()"
+                    style="width:100%;padding:10px;border-radius:8px;border:none;background:#c92a2a;color:#fff;cursor:pointer">🗑
+                    刪除已儲存的 Key</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -401,8 +440,47 @@
             }
         }
 
+        function openSettings() {
+            document.getElementById('modal').style.display = 'flex';
+        }
+        function closeSettings() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        async function saveKeys() {
+            const k = document.getElementById('inp-key').value.trim();
+            const s = document.getElementById('inp-secret').value.trim();
+            const msg = document.getElementById('modal-msg');
+            if (!k || !s) { msg.style.color = '#ff6b6b'; msg.textContent = '⚠️ 請填寫完整'; return; }
+            const res = await fetch('/api/config', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: k, api_secret: s })
+            });
+            const data = await res.json();
+            if (data.success) {
+                msg.style.color = '#51cf66'; msg.textContent = '✅ 儲存成功！';
+                // setTimeout(() => { closeSettings(); loadBalances(); loadOffers(); }, 800);
+                setTimeout(() => { location.reload(); }, 800);
+            } else {
+                msg.style.color = '#ff6b6b'; msg.textContent = '❌ ' + data.error;
+            }
+        }
+
+        async function clearKeys() {
+            if (!confirm('確定刪除？')) return;
+            await fetch('/api/config', { method: 'DELETE' });
+            closeSettings();
+        }
+
+        async function checkConfig() {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (!data.configured) openSettings();  // 首次啟動自動彈出
+        }
+
+        checkConfig();
         loadBalances();
-        loadOffers();    // ← 這行
+        loadOffers();
     </script>
 </body>
 
